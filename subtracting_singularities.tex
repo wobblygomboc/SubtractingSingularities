@@ -1,0 +1,388 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[title]{appendix}
+\usepackage{bm}
+\usepackage{listings,amsmath,amssymb,xcolor,graphicx,url}
+\usepackage{amsmath}
+\usepackage[round]{natbib}
+\usepackage[inner=0.75in,outer=2.25in,top=3cm,bottom=3cm]{geometry}
+\usepackage{subcaption}
+\usepackage{import}
+\usepackage{setspace}
+%\usepackage[sc]{titlesec}
+\definecolor{lgrey}{HTML}{808080}
+\definecolor{dgrey}{HTML}{404040}
+\lstset{language=C++}
+\lstset{ %
+  basicstyle=\small\ttfamily,
+  commentstyle=\color{lgrey},
+  keywordstyle=\color{dgrey},
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  showspaces=false,
+  showstringspaces=false, 
+  showtabs=false,
+  stringstyle=\color{dgrey},
+  tabsize=4,   
+  rulecolor=\color{dgrey},
+  numbers=left
+}
+
+% number equations by section
+\numberwithin{equation}{section}
+
+% \inline is a custom macro
+\def\inline{\lstinline[basicstyle=\ttfamily]}
+
+\newcommand{\includecode}[2]{\subsection{\lstinline[basicstyle=\ttfamily\large]{#1}}\lstinputlisting{#2}}
+
+\newcommand{\A}{\mathcal{A}\,}
+\newcommand{\Order}{\mathcal{O}} 
+\newcommand{\Rey}{\mathrm{Re}\,} 
+\newcommand{\Reyn}{\mathrm{Re}}
+\newcommand{\D}{\mathrm{d}}  
+\newcommand{\Ca}{\,\mathrm{Ca}\,}
+\newcommand{\Ri}{\bar{R}_\text{ini}}
+\newcommand{\subsectionformat}{\centering}  
+\newcommand{\oomph}{\texttt{oomph-lib}}
+\newcommand{\oomphs}{\texttt{oomph-lib }}
+\newcommand{\FvK}{F\"oppl-von K\'arm\'an }
+
+% vector calculus shorthands
+\newcommand{\Div}{\nabla\cdot}
+\newcommand{\grad}{\bm\nabla}
+\newcommand{\curl}{\bm\nabla\times}
+\newcommand{\laplacian}{\bm\nabla^2}
+
+% expand the super annoying-to-remember abbreviation of infinity
+\newcommand{\infinity}{\infty}
+
+\newcommand{\reg}[1]{#1^{\text{FE}}}
+% Document title: uncomment the appropriate title
+\title{}
+
+\author{Student No: 10239339} % your student number here
+\date{}
+
+% set path (for pdf+LaTeX images)
+\graphicspath{ {../images/} }
+
+\begin{document}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+\begin{titlepage}
+\newgeometry{inner=1.5in,outer=1.5in, bottom=1.2in}
+    \begin{center}
+        \vspace*{1cm}        
+        \Huge
+        \textcolor{gray}{\textbf{Singularities in Flow Around a Sharp Edge: \\ \Large The Integrated Singular Basis Function Method}}
+        \vspace{1.5cm}        \\
+        \large\textbf{Christian Vaquero-Stainer} \\ \vspace{4mm} 
+        \normalsize
+        School of Physics and Astronomy \\
+        University of Manchester, Manchester M13 9PL, UK
+        \vfill
+        \normalsize
+        First year extension report
+    \vfill
+    % \begin{abstract}
+  %    \noindent
+  % \end{abstract}
+    \end{center}
+\end{titlepage}
+\restoregeometry
+\spacing{1.5}
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}  
+\begin{figure}
+  \import{../images/}{stick_slip_problem.pdf_tex}
+  \vspace{5mm}
+  \caption{Stick-slip problem.}
+  \label{fig:stick_slip}
+\end{figure}
+In this document we describe the Integrated Singular Basis Function Method (ISBFM) as a method for handling singularities in the Finite Element Method (FEM). We use as an example the the stick-slip problem, shown in Fig. \ref{fig:stick_slip}. In this problem, an initially wall-bounded inflow experiences an abrupt change in the boundary conditions of the upper surface, changing from a Dirichlet no-slip condition on the velocity to a Neumann condition on the traction. This discontinuity generates a singularity in the fluid pressure  at the point $(0,1)$.
+
+The flow is assumed to be incompressible, governed by the momentum and continuity equations:
+\begin{subequations}
+  \begin{equation}
+    \bm\Div \bm\tau = \bm 0,
+  \end{equation}
+  \begin{equation}
+    \bm\Div \bm u^* = 0,
+    \label{eqn:continunity}
+  \end{equation}
+  \label{eqn:governing}
+\end{subequations}
+for fluid velocity $\bm u^*$ and stress tensor $\bm \tau$. In general, the fluid velocity is subjected to boundary conditions of the Dirichlet type, in index notation:
+\begin{equation}
+  u^*_i = U^{\text{given}}_i,
+  \label{eqn:dirichlet}
+\end{equation}
+and Neumann conditions are imposed on the traction:
+\begin{equation}
+  t^*_i = T^{\text{given}}_i.
+  \label{eqn:neumann}
+\end{equation}
+The core principle of the ISBFM is that the analytic form of the singularity is known. This allows the solution to be decomposed into a known singular part and an unknown regular part:
+\begin{equation}
+  u_i^* = \sum_j c_j\hat u^{j}_{i} + u, \quad\quad p^* = \sum_j c_j\hat p^j + p,
+  \label{eqn:eigenfunction_decomposition_sum}
+\end{equation}
+where $u$ and $p$ are the regular part of the solution which will be computed via FEM, hats denote the singular basis functions, and $c_j$ are unknown amplitudes to be determined.
+For simplicity, we shall focus on the use of a single set of eigenfunctions:
+\begin{equation}
+  u^*_i = c\hat u_{i} + u_i, \quad\quad p^* = c\hat p + p.
+  \label{eqn:eigenfunction_decomposition}
+\end{equation}
+The basis functions $\hat u_i$ and $\hat p$ are known analytic functions, derived from an asymptotic solution in the vicinity of the singularity. A key requirement on these singular eigenfunctions is that they satisfy the governing equations \eqref{eqn:governing} and the (arbitrary) boundary conditions in the vicinity of the singularity. We shall return to this requirement later on, and show how it prevents singularities from appearing in the residual equations.
+
+We highlight here that the unknown amplitude $c$ is the same for both the pressure and velocity eigenfunctions, and so shall be determined by a single scalar equation.
+
+\subsection{Boundary conditions}
+
+The decomposition \eqref{eqn:eigenfunction_decomposition} transforms the original problem in Fig. \ref{fig:stick_slip} to that shown in Fig. \ref{fig:modified_stick_slip}, which shows the transformed boundary conditions which apply to the regular part of the solution to be computed via FEM. 
+\begin{figure}
+  \import{../images/}{stick_slip_problem_modified.pdf_tex}
+  \vspace{5mm}
+  \caption{Modified stick-slip problem.}
+  \label{fig:modified_stick_slip}
+\end{figure}
+This regular part of the solution must of course satisfy the governing equations, and the boundary conditions \eqref{eqn:dirichlet} and \eqref{eqn:neumann} are now modified to:
+\begin{equation}
+  u_i = U^{\text{given}}_i - c \hat u_i \quad\text{on}\,\partial\Omega_D
+  \label{eqn:BC_dirichlet_FE}
+\end{equation}
+for Dirichlet conditions, and
+\begin{equation}
+  t_i = T^{\text{given}}_i - c \hat T_i, \quad\text{where }\, \hat T_i = \hat\tau_{ij}n_j \quad\text{on}\,\partial\Omega_N
+  \label{eqn:BC_dirichlet_neumann}
+\end{equation}
+for traction conditions, where $\hat\tau_{ij}$ are the components of the singular functions' contributions to the stress tensor, and $n_j$ are the components of the outward-facing unit normal vector. The Dirichlet type condition \eqref{eqn:BC_dirichlet_FE} now depends on the the amplitude $c$ which is unknown \emph{a priori}. It is therefore enforced weakly via Lagrange multipliers $\lambda_i$:
+\begin{equation}
+  \oint_{\partial\Omega_D}\left[u_i - (U_i^{\text{given}}-c\hat u_i)\right]\lambda_i \D S = 0,
+  \label{eqn:weak_BC_lagrange_mpy}
+\end{equation}
+where $\partial\Omega_D$ denotes the boundaries along which Dirichlet conditions are imposed.
+\subsection{The residual equations}
+The regular parts of the solution are discretised in the standard way for FEM, via pre-defined basis functions $\psi_j$ and $\phi_j$ for the velocity and pressure respectively:
+\begin{equation}
+  u_i = \sum_j U_{ij}\psi_j, \quad\quad p = \sum_j P_j \phi_j,
+\end{equation}
+where the discrete coefficients $U_{ij}$ and $P_j$ are to be determined. The Lagrange multipliers used to enforce the modified Dirichlet conditions on the regular part of the solution are also discretised in the same way:
+\begin{equation}
+  \lambda_i = \sum_j L_{ij}\psi_j.
+\end{equation}
+To determine these multipliers, we seek a variational form of the weak form \eqref{eqn:weak_BC_lagrange_mpy} which will serve as a residual equation for FEM:
+\begin{equation}
+  \delta   \oint_{\partial\Omega_D}\left[u_i - (U_i^{\text{given}}-c\hat u_i)\right]\lambda_i \D S = 0  
+\end{equation}
+\begin{equation}
+  = \oint_{\partial\Omega_D} \lambda_i\delta u_i\D S + \oint_{\partial\Omega_D}\hat u_i\lambda_i\delta c\D S +
+  \oint_{\partial\Omega_D}\left[u_i - (U_i^{\text{given}}-c\hat u_i)\right]\delta\lambda_i \D S.
+  \label{eqn:lagrange_mpy_variational}
+\end{equation}
+The variations $\delta u_i$ and $\delta \lambda_i$ are discretised in the usual way:
+\begin{align}
+  \delta u_i &= \sum_j \delta U_{ij}\psi_j, \\
+    \delta \lambda_i &= \sum_j \delta L_{ij}\psi_j.
+\end{align}
+
+Inserting this discretisation into the final term in the variational expression \eqref{eqn:lagrange_mpy_variational} gives the residual equation for the Lagrange multiplier:
+\begin{equation}
+  r^{[\lambda]}_{ij} = \oint_{\partial\Omega_D}\left[u_i - (U_i^{\text{given}}-c\hat u_i)\right]\psi_j \D S,
+  \label{eqn:residual_lambda}
+\end{equation}
+where we have adopted notation whereby square bracket superscripts label the quantity determined by this residual, and the subscript indices denote that this expression gives the contribution to the residual for $\lambda_i$ from the $j$th node (with basis function $\psi_j$).
+Inserting the finite element discretisation into the first term yields additional contributions from the Lagrange multipliers to the velocity residuals and the residuals which determine $c$:
+\begin{align}
+  r^{[u]}_{ij(\lambda)} &= \oint_{\partial\Omega_D}\lambda_i\psi_j \D S,
+  \label{eqn:lambda_contribution_to_u} \\
+  r^{[c]}_{(\lambda)} &= \oint_{\partial\Omega_D}\hat u_i\lambda_i \D S,
+                      \label{eqn:lambda_contribution_to_C}
+\end{align}
+where the subscript labels in round brackets $(\lambda)$ denote contributions from $\lambda$ to the full residuals. To determine the single unknown eigenvalue $c$, we require a single scalar equation. This is achieved by combining the weak form of the governing equations into a single Galerkin integral, weighted by the singular basis functions $\hat u_i$ and $\hat p$:
+\begin{equation}
+  \int_{\Omega} \left(\frac{\partial \tau_{ij}}{\partial x_j} \hat u_i + \frac{\partial u_j}{\partial x_j}\hat p\right)\D V = 0.
+  \label{eqn:r_c_weak}
+\end{equation}
+The fluid is assumed to be Newtonian, i.e. to have a linear relationship between the deviatoric part of the stress tensor and the strain-rate tensor $\bm\epsilon$:
+\begin{equation}
+  \tau_{ij} = -p\delta_{ij} + 2\epsilon_{ij} = -p\delta_{ij} + \left(\frac{\partial u_i}{\partial x_j} + \frac{\partial u_j}{\partial x_i}\right),
+\end{equation}
+where $\delta_{ij}$ is the Kronecker delta. Substituting this relation into \eqref{eqn:r_c_weak} gives:
+\begin{align}
+  &= \int_{\Omega} \left\{\frac{\partial}{\partial x_j}\left[-p\delta_{ij} + \left(\frac{\partial u_i}{\partial x_j} + \frac{\partial u_j}{\partial x_i}\right) \right] \hat u_i + \frac{\partial u_j}{\partial x_j}\hat p\right\}\D V = 0 \\
+      &= \int_{\Omega} \left(-\frac{\partial p}{\partial x_i}\hat u_i + \frac{\partial}{\partial x_j}\left(\frac{\partial u_i}{\partial x_j}\right)\hat u_i + \frac{\partial}{\partial x_j}\left(\frac{\partial u_j}{\partial x_i}\right)\hat u_i + \frac{\partial u_j}{\partial x_j}\hat p \right) \D V.
+\end{align}
+The first three terms in this expression can then be integrated by parts:
+\begin{align}
+  -\int_{\Omega} \left( -p\frac{\partial \hat u_j}{\partial x_j} + \frac{\partial u_i}{\partial x_j} \frac{\partial\hat u_i}{\partial x_j}  + \frac{\partial u_j}{\partial x_i} \frac{\partial\hat u_i}{\partial x_j} - \frac{\partial u_j}{\partial x_j}\hat p \right) \D V + \oint_{\partial\Omega}\tau_{ij}n_j\hat u_i\D s \\
+  = -\int_{\Omega} \left( \frac{\partial u_i}{\partial x_j} \frac{\partial\hat u_i}{\partial x_j}  + \frac{\partial u_j}{\partial x_i} \frac{\partial\hat u_i}{\partial x_j} - \frac{\partial u_j}{\partial x_j}\hat p \right) \D V + \oint_{\partial\Omega}\tau_{ij}n_j\hat u_i\D s,
+  \label{eqn:int_by_parts_once}
+\end{align}
+where the second line follows because the singular eigenfunctions $\hat u_i$ satisfy the continuity equation \eqref{eqn:continunity}.
+To proceed, we now make use of the divergence theorem:
+\begin{align}
+  \int_{\Omega} \frac{\partial}{\partial x_j}\left(u_i\frac{\partial\hat u_i}{\partial x_j}\right) \D V &=
+                                                                                                 \oint_{\partial \Omega} u_i\frac{\partial \hat u_i}{\partial x_j}n_j dS,  \\
+\implies \int_{\Omega} \left(\frac{\partial u_i}{\partial x_j} \frac{\partial\hat u_i}{\partial x_j} + u_i\frac{\partial^2 \hat u_i}{\partial x_j^2}\right) \D V &=  \oint_{\partial \Omega} u_i\frac{\partial \hat u_i}{\partial x_j}n_j dS.
+  \label{eqn:divergence_thereom_1}
+\end{align}
+Similarly, we can exchange the indices to obtain the equivalent expression:
+\begin{align}
+  \int_{\Omega} \frac{\partial}{\partial x_i}\left(u_j\frac{\partial\hat u_i}{\partial x_j}\right) \D V &=
+                                                                                                 \oint_{\partial \Omega} u_j\frac{\partial \hat u_i}{\partial x_j}n_i dS,  \\
+\implies \int_{\Omega} \left( \frac{\partial u_j}{\partial x_i} \frac{\partial\hat u_i}{\partial x_j} + u_i\frac{\partial^2 \hat u_i}{\partial x_i \partial x_j} \right) \D V &=  \oint_{\partial \Omega} u_j\frac{\partial \hat u_i}{\partial x_j} n_i dS.
+  \label{eqn:divergence_thereom_2}
+\end{align}
+We recognise the first term in \eqref{eqn:divergence_thereom_1} and the first term in \eqref{eqn:divergence_thereom_2} being the first and second terms in \eqref{eqn:int_by_parts_once}, respectively. Thus, rearranging \eqref{eqn:divergence_thereom_1} and \eqref{eqn:divergence_thereom_2} and substituting into \eqref{eqn:int_by_parts_once} gives:
+\begin{equation}
+  \int_{\Omega} \left(u_i\frac{\partial^2\hat u_i}{\partial x_j^2} + u_j\frac{\partial^2\hat u_i}{\partial x_i\partial x_j} + \frac{\partial u_j}{\partial x_j}\hat p\right) \D V + \oint_{\partial\Omega}\left( u_i\frac{\partial\hat u_i}{\partial x_j}n_j + u_j\frac{\partial\hat u_i}{\partial x_j}n_i  \right) \D S + \oint_{\partial\Omega}\tau_{ij}n_j\hat u_i\D S = 0
+\end{equation}
+We can separate out the derivative with respect to $x_j$ in the first two terms, and also note that since this is a scalar equation with no free indices, we are free to exchange the indices on the second term of the second integral, giving:
+\begin{equation}
+  \int_{\Omega}\left( u_i\frac{\partial}{\partial x_j}\left[\frac{\partial \hat u_i}{\partial x_j} + \frac{\partial \hat u_j}{\partial x_i}\right] - \frac{\partial u_j}{\partial x_j}\hat p \right)\D V - \oint_{\partial\Omega}u_i\left[\frac{\partial \hat u_i}{\partial x_j} + \frac{\partial\hat u_j}{\partial x_i}\right]n_j\D S + \oint_{\partial\Omega}\tau_{ij}n_j\hat u_i\D S = 0.
+\end{equation}
+We recognise the two terms in square brackets from the definition of the Newtonian stress tensor, allowing this expression to be written in terms of the singular total stress tensor $\bm{\hat \tau}$:
+\begin{equation}
+  \int_{\Omega}\left( u_i\frac{\partial}{\partial x_j}(\hat\tau_{ij} + \hat p\delta_{ij}) + \frac{\partial u_j}{\partial x_j}\hat p \right)\D V - \oint_{\partial\Omega}u_i( \hat\tau_{ij} + \hat p\delta_{ij} ) n_j\D S + \oint_{\partial\Omega}\tau_{ij}n_j\hat u_i\D S = 0.
+\end{equation}
+Now the first term, the divergence of the singular stress tensor, is zero by the governing momentum equation. The pressure gradient term can then be integrated by parts:
+\begin{equation}
+  \int_{\Omega} \left(-\hat p\frac{\partial u_j}{\partial x_j} + \frac{\partial u_j}{\partial x_j}\hat p \right)\D V +\oint_{\partial\Omega}u_j\hat p n_j \D S - \oint_{\partial\Omega} u_i\hat\tau_{ij}n_j\D S - \oint_{\partial\Omega}u_j\hat p n_j \D S  + \oint_{\partial\Omega}\tau_{ij}n_j\hat u_i\D S = 0.
+\end{equation}
+The first integral and the second and fourth integrals trivially cancel, and after a change of indices this yields the final expression:
+\begin{equation}
+  \oint_{\partial\Omega}\left[ (\tau_{ij}n_j)\hat u_i - (\hat\tau_{ij}n_j) u_i \right] \D S = 0.
+\end{equation}
+The Galerkin volume integral \eqref{eqn:r_c_weak} has been reduced to a boundary surface integral. Thus the final residual equation which determines the amplitude $c$ is given by combining the above expression with the residual contribution from the Lagrange multipliers $r_{(\lambda)}^{[c]}$ given by \eqref{eqn:lambda_contribution_to_C}:
+\begin{equation} 
+  r^{[c]} = \oint_{\partial\Omega}\big[ (\tau_{ij}n_j)\hat u_i - (\hat\tau_{ij}n_j) u_i\big] \D S + \int_{\partial\Omega_D}\lambda_i\hat u_i\D S,
+  \label{eqn:residual_c} 
+\end{equation}
+where we remind ourselves that the second integral is an open surface integral which is only performed over boundaries on which Dirichlet conditions are applied, since it is only these boundaries which generate the contributions from the Lagrange multiplier equations used to enforce such conditions.
+
+Similarly, adding the contributions \eqref{eqn:lambda_contribution_to_u} to the standard Galerkin weak form of the governing momentum equations yields the final residual equations for the regular finite-element part of the velocity:
+\begin{equation}
+  r^{[u]}_{ij} =  \int_{\Omega} \frac{\partial \tau_{ik}}{\partial x_k} \psi_j\D V + \int_{\partial\Omega_D} \lambda_i\psi_j \D S,
+  \label{eqn:residual_velocity}
+\end{equation}
+where the first term now applies throughout the bulk, with the Lagrange multiplier contribution again entering in only on Dirichlet boundaries.
+
+Finally, the regular finite-element pressure is determined from the continuity equation and is unaffected by the addition of Lagrange multipliers, so its residual is the standard Garlerkin weak form:
+\begin{equation}
+  r^{[p]}_{j} = \int_{\Omega} \frac{\partial u_i}{\partial x_i}\phi_j \D V.
+\end{equation}
+At this point we return to the requirement we placed on the singular basis functions $\hat u_i$; that they satisfy the boundary conditions for the problem, which need not be homogeneous. By weighting the Galerkin integral with $\hat u_i$ in the derivation of the residual $r^{[c]}$, the integral may be singular.
+
+To demonstrate that the requirement that $\hat u_i$ satisfy the boundary conditions yields a well-behaved residual, we split the boundary into two sections: parts of the boundary which lie on the boundary where the singularity exists, and parts which do not, where the solution is bounded. These two sections can be further divided: sections along which Dirichlet conditions are imposed, and sections where Neumann conditions apply. We shall denote the two sections of the singular boundary by $\partial\Omega_D^{\text{sing}}$ and $\partial\Omega_N^{\text{sing}}$, and the two types of boundary away from the singular boundary as $\partial\Omega_D^{\text{reg}}$ and $\partial\Omega_N^{\text{reg}}$, with the subscripts denoting the type of condition. We can consider general inhomogeneous conditions:
+\begin{align}
+  &\text{Dirichlet: }\quad\quad\quad\;\; \hat u_i\big|_{\partial\Omega_D^{\text{sing}}} = \mathfrak{u}_i, \quad&\implies\quad u\big|_{\partial\Omega_D^{\text{sing}}} = 0,
+  \label{eqn:singular_BCs_dirichlet} \\
+  &\text{Neumann: }\quad\quad \hat \tau_{ij}n_j\big|_{\partial\Omega_N^{\text{sing}}} = g_i, \quad&\implies\quad t_i\big|_{\partial\Omega_N^{\text{sing}}} = 0.
+  \label{eqn:singular_BCs_neumann}
+\end{align}
+We can then split the boundary integral in \eqref{eqn:residual_c} into the four parts:
+\begin{equation}
+  \begin{split}
+    r^{[c]} = &\int_{\partial\Omega_D^{\text{reg}}}\;\big[ t_i\hat u_i - (\hat \tau_{ij}n_j) u_i\big] \D S
+    + \int_{\partial\Omega_D^{\text{reg}}}\lambda_i\hat u_i\D S\;+ \\
+    &\int_{\partial\Omega_N^{\text{reg}}}\;\big[ t_i\hat u_i - (\hat \tau_{ij}n_j) u_i\big] \D S \; + \\
+    &\int_{\partial\Omega_D^{\text{sing}}}\big[ t_i\hat u_i - (\hat \tau_{ij}n_j) u_i\big] \D S
+    + \int_{\partial\Omega_D^{\text{sing}}}\lambda_i\hat u_i\D S\; + \\   
+    &\int_{\partial\Omega_N^{\text{sing}}}\big[ t_i\hat u_i - (\hat \tau_{ij}n_j) u_i\big] \D S.
+  \end{split}
+\end{equation}
+The two non-singular boundaries, $\partial\Omega_D^{\text{reg}}$ and $\partial\Omega_N^{\text{reg}}$, do not pose a problem since on these boundaries $\hat u_i$ is bounded, and so the first two integrals are well-behaved. On the singular boundaries $\partial\Omega_D^{\text{sing}}$ and $\partial\Omega_N^{\text{sing}}$, the eigenfunctions $\hat u_i$ and $\hat \tau_{ij}$ may be singular, and therefore we must consider the final two integrals carefully. On the Dirichlet section, $\hat u_i$ is finite, as it satisfies the boundary condition \eqref{eqn:singular_BCs_dirichlet}, and is only multiplied by regular quantities $t_i$ and $\lambda_i$ in the third integral, and so this term is finite. The singular contributions to the stress $\hat \tau_{ij}$ are singular on this section of the boundary, but the regular velocity components $u_i$ are zero from \eqref{eqn:singular_BCs_dirichlet}, and so the second term in the third integral is zero, resulting in a bounded integrand.
+
+On the Neumann section of the singular boundary, the eigenfunctions $\hat u_i$ diverge, but they are multiplied by $t_i$ in the first term of the final integral, which are zero from \eqref{eqn:singular_BCs_neumann}, and so this term is zero. The singular stress contributions $\hat \tau_{ij}$ are regular as they must meet the boundary conditions, and are multiplied by the regular velocity components $u_i$ in the second term of the fourth integral, and so this term is finite, rendering the integrand finite. Thus the total residual is finite.
+
+%\subsection{Interpreting the Lagrange multipliers}
+
+\section{Three Dimensions}
+
+We now introduce a coordinate system $(\rho,\zeta,\phi)$, where $\rho$ is the radial distance from the edge of the sheet in an outward normal direction, $\phi$ is the angle of elevation from the tangent plane, and $\zeta$ is a tangent coordinate which runs around the perimeter of the sheet (see Fig. \ref{}). We can then express the total solution as:
+\begin{equation}
+  \bm u^*(\rho,\zeta,\phi) = \bm u(\rho,\zeta,\phi) + \sum_{j=1}^2 c_j(\zeta)\hat{\bm u}^j(\rho,\phi).
+\end{equation}
+$\hat{\bm u}(\rho,\phi)$ is the same function as before, now effectively representing the 3D flow past a semi-infinite plane (i.e. one that does not vary in the azimuthal direction $\zeta$). In the 2D problem, the singularities at the ends of the fibre are discrete and have constant coefficients $c_j$. In 3D, there is a continuous line singularity around the edge of the sheet. The effects of the variations of the sheet's position and orientation in $\zeta$ are now encapsulated by the variable coefficients $c_j = c_j(\zeta)$.
+
+Since the singular contribution $\sum_j c_j(\zeta)\hat{\bm u}^j(\rho,\phi)$ satisfies the governing equations, we can write down the reciprocity relation:
+\begin{align}
+  &\oint_{S}\left[\tau_{ij}(\rho,\phi)n_jc_k(\zeta)\hat{u}^k_i(\rho,\phi) - c_k(\zeta)\hat{\tau}^k_{ij}(\rho,\phi)n_ju_i(\rho,\phi)\right]\D S = 0 \\
+  = &\oint_{\partial\Gamma}\left[\tau_{ij}(\rho,\phi)n_j\hat{u}^k_i(\rho,\phi) - \hat{\tau}^k_{ij}(\rho,\phi)n_ju_i(\rho,\phi)\right]_{\rho=\rho_\Gamma}c_k(\zeta)\D\zeta\D\phi = 0,
+      \label{eqn:c_integral_3d}
+\end{align}
+where $\partial\Gamma$ is the surface of the torus defined by $\rho=\rho_\Gamma$. Here we have written the relation in terms of the scaled singular contribution, in contrast with the 2D case, as the amplitude now depends on $\zeta$. We then discretise the amplitude via the shape functions and truncate in the usual way, ${c_k(\zeta) \approx \sum_l^N C_k^l \psi_l(\zeta)}$, and insert this discretisation into \eqref{eqn:c_integral_3d} to give $N$ equations for the $N$ coefficients $C_k^1,...,C_k^N$:
+\begin{equation}
+ r_l^{[c_k]} = &\oint_{\partial\Gamma}\left[\tau_{ij}n_j\hat{u}^k_i - \hat{\tau}^k_{ij}n_ju_i\right]_{\rho=\rho_\Gamma}\psi_l\D\zeta\D\phi.
+\end{equation}
+\section{Augmented Region}
+
+The total solution must be continuous across the boundary of the augmented region. That is to say, the solution in the augmented region $\Gamma$, which we shall refer to as the `left' region, must be equal to the pure FE solution, from the `right' region, on the region boundary. Mathematically:
+
+\begin{equation}
+  \bm u^{*L} = \bm u^L + \sum_j c_j\hat{\bm u}^j = \bm u^R.
+\end{equation}
+This is a Dirichlet condition which depends on the unknown amplitudes $c_j$, and so as before with the boundary conditions, this condition must be enforced via Lagrange multipliers $\bm \Lambda$:
+\begin{equation}
+  \oint_{\partial\Gamma} \left(\bm u^L + \sum_j c_j\hat{\bm u}^j - \bm u^R \right)\cdot\bm \Lambda \D S = 0.
+\end{equation}
+%
+Taking variations of this expression gives:
+\begin{equation}
+  \oint_{\partial\Gamma} \left(\bm u^L + \sum_j c_j\hat{\bm u}^j - \bm u^R \right)\cdot\delta\bm \Lambda \D S
+  + \oint_{\partial\Gamma} \bm\Lambda\cdot(\delta \bm u^L - \delta\bm u^R)\D S
+  + \oint_{\partial\Gamma}\bm\Lambda\cdot\sum_j\delta c_j\hat{\bm u}^j\D S = 0.
+  \label{eqn:lagrange_mpy_variational}
+\end{equation}
+The first term gives the equations for the Lagrange multipliers themselves, and the second two terms give the Lagrange multiplier contributions to the bulk and amplitude equations respectively. Discretising these equations in the usual way, $[\bm \Lambda,\bm u] = \sum_j[\bm\Lambda^j,\bm u^j]\psi_j $, yields a residual equation for the coefficients $\Lambda_j$:
+\begin{equation}
+r^{[\bm \Lambda]}_{j} = \oint_{\partial\Gamma} \left(\bm u^L + \sum_k c_k\hat{\bm u}^k - \bm u^R \right)\psi_j \D S,
+\end{equation}
+the contributions to the residuals for the bulk equations:
+\begin{align}
+  r^{[\bm u^L]}_{k(\bm \Lambda)} &= \hphantom{-}\oint_{\partial\Gamma} \bm\Lambda \psi_k \D S, \\
+  r^{[\bm u^R]}_{k(\bm \Lambda)} &= -\oint_{\partial\Gamma} \bm\Lambda \psi_k \D S,
+\end{align}
+and the singular amplitude equations:
+\begin{equation}
+ r^{[c_j]}_{k(\bm \Lambda)} = \oint_{\partial\Gamma}\bm\Lambda\cdot\hat{\bm u}^j \psi_k\D S.
+\end{equation}
+There are also additional contributions to be considered which result from the discontinuity in the FE solution between the augmented and pure FE regions. Taking the governing momentum equation in the augmented region and applying Green's first identity:
+\begin{equation}
+  \int_\Gamma \bm{\nabla}\cdot\bm{\tau} \psi\, \D V = \oint_{\partial\Gamma}\bm{\tau}\bm n \psi\,\D V - \int_\Gamma \bm{\tau}\bm\nabla\psi\,\D V.
+\end{equation}
+We consider now the closed integral term. In a regular FE formulation, i.e. in the bulk region outside of the augmented region, the stress on an element's boundary is equal and opposite to the stress on the adjacent element which shares this boundary, and so this integral vanishes. However, along the augmented boundary this is no longer the case, as the element on the `left' now has the additional contributions of the singular functions. By the same continuity argument as above, we have that:
+
+\begin{equation}
+  \bm{\tau}^{\bm *L} = \bm{\tau}^L + \sum_j c_j\hat{\bm{\tau}} = \bm\tau^R,
+\end{equation}
+which gives the difference in the finite element stress across this boundary to be:
+\begin{equation}
+  \bm\tau^R - \bm{\tau}^L = \sum_j c_j\hat{\bm{\tau}},
+\end{equation}
+i.e. the total stress associated with all singular functions. This jump in the FE stress therefore makes an additional contribution to the bulk residual of the `left' elements on the boundary of the augmented region:
+\begin{equation}
+  r^{[\bm u^L]}_{k(\hat{\bm\tau})} = \oint_{\partial\Gamma}\sum_jc_j\hat{\bm\tau}^j\bm n\psi_k\,\D S.
+\end{equation}
+\subsection{Jacobian}
+Differentiating the above residuals with respect to the unknowns ($\bm u^{[L,R]},\bm\Lambda, c_j $) gives the Jacobian entries:
+\begin{align}
+  \frac{\partial r^{[u_i^L]}_k}{\partial\Lambda_i} &= \hphantom{-}\oint_{\partial\Gamma}\psi_k\D S \\
+  \frac{\partial r^{[\bm u^L]}_k}{\partial c_j} &= \hphantom{-}\oint_{\partial\Gamma}\bm\tau^j\bm n\psi_k\D S \\
+  \frac{\partial r^{[\Lambda_i]}_k}{\partial u_i^L} &= \hphantom{-}\oint_{\partial\Gamma}\psi_k\D S \\
+  \frac{\partial r^{[\Lambda_i]}_k}{\partial u_i^R} &= -\oint_{\partial\Gamma}\psi_k\D S \\
+  \frac{\partial r^{[\bm\Lambda]}_k}{\partial c_j} &= \hphantom{-}\oint_{\partial\Gamma}\hat{\bm u}^j\psi_k\D S \\
+\end{align}
+\bibliographystyle{plainnat}
+\bibliography{bibliography} 
+\end{document} 
+ 
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End: 
+ 
